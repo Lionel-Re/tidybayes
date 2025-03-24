@@ -418,40 +418,62 @@ spread_draws_long_ = function(
       convert = TRUE #converts dimensions to numerics if applicable
     )
 
-    # Now go to a long format for everything else...
-    # We have three things to accomplish here:
-    # 1. SPREAD so variable names are back as columns
-    # 2. ADD CHAIN INFO (.chain, .iteration, .draw) back into the data frame
-    # 3. UNNEST so draws and chain info are no longer list columns
+# Now go to a long format for everything else...
+    # We have four main steps to accomplish here:
+    # 1. SPREAD: convert variables back into column format.
+    # 2. Dynamically identify columns to check for missing values (NAs).
+    # 3. ADD CHAIN INFO: (.chain, .iteration, .draw) back into the data frame.
+    # 4. UNNEST so draws and chain info are no longer list columns
     # The order we will take depends on whether or not the user has requested nested columns (e.g.
     # array output), because order 1/2/3 is fast but doesn't currently work for doing nested columns.
+    
     if (length(nested_dimension_names) > 0) {
       # some dimensions were requested to be nested as list columns containing arrays.
       # thus we have to ADD CHAIN INFO then UNNEST, then NEST DIMENSIONS then SPREAD
-      # 2. ADD CHAIN INFO
+      
+      # 3. ADD CHAIN INFO
       nested_draws[[".chain_info"]] = list(draws[, draw_indices])
-      # 3. UNNEST
+      
+      # 4. UNNEST
+      # Unnest list columns using legacy method (needed for nested dimensions)
       long_draws = unnest_legacy(nested_draws)
+      
       # NEST DIMENSIONS
       long_draws = nest_dimensions_(long_draws, temp_dimension_names, nested_dimension_names, draw_indices)
+      
       # 1. SPREAD
       long_draws = spread(long_draws, ".variable", ".value")
+      
     } else {
-      # no nested dimensions, so we can do the SPREAD then UNNEST then ADD CHAIN INFO
+      
+      # no nested dimensions, so we can do the SPREAD then UNNEST then IDENTIFY COLUMNS and then ADD CHAIN INFO
+      
       # 1. SPREAD
       nested_draws = spread(nested_draws, ".variable", ".value")
-      # 2. ADD CHAIN INFO
+      
+      # 2. Dynamically determine columns to check for NAs (exclude dimension columns)
+      unnested_columns <- setdiff(colnames(nested_draws), dimension_names)
+      
+      # 3.  ADD CHAIN INFO
       nested_draws[[".chain_info"]] = list(draws[, draw_indices])
-      # 3. UNNEST
-      long_draws = unnest_legacy(nested_draws)
+      
+      # 4. UNNEST 
+      # Unnest all columns except dimensions, then remove rows with NA values
+      long_draws <- nested_draws %>%
+        unnest(-!!dimension_names) %>% 
+        drop_na(any_of(unnested_columns))
+      
     }
-
-    #drop the columns that correspond to blank dimensions in the original spec
+    
+    # Drop columns corresponding to blank dimensions specified in the original spec
     long_draws[, grep("^\\.drop", names(long_draws), value = TRUE)] = NULL
-    #group by the desired dimensions so that we return a pre-grouped data frame to the user
+    
+    # Return data grouped by specified dimensions
     group_by_at(long_draws, dimension_names)
+    
   }
 }
+
 
 
 ## Nest some dimensions of a variable into list columns (for x[.,.] syntax in gather/spread_draws)
