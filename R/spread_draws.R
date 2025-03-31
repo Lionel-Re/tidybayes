@@ -234,19 +234,19 @@ globalVariables(c(".."))
 #' @rdname spread_draws
 #' @export
 spread_draws = function(
-  model,
-  ...,
-  regex = FALSE,
-  sep = "[, ]",
-  ndraws = NULL,
-  seed = NULL,
-  draw_indices = c(".chain", ".iteration", ".draw"),
-  n
+    model,
+    ...,
+    regex = FALSE,
+    sep = "[, ]",
+    ndraws = NULL,
+    seed = NULL,
+    draw_indices = c(".chain", ".iteration", ".draw"),
+    n
 ) {
   ndraws = .Deprecated_argument_alias(ndraws, n)
-
+  
   draws = sample_draws_from_model_(model, ndraws, seed)
-
+  
   draw_indices = intersect(draw_indices, names(draws))
   tidysamples = lapply(enquos(...), function(variable_spec) {
     spread_draws_(
@@ -257,7 +257,7 @@ spread_draws = function(
       draw_indices = draw_indices
     )
   })
-
+  
   #get the groups from all the samples --- when we join them together,
   #the grouping information is lost (actually, only the groups on the
   #first data frame in a join is retained), so we'll have to recreate
@@ -265,7 +265,7 @@ spread_draws = function(
   groups_ = tidysamples %>%
     lapply(group_vars) %>%
     reduce_(union)
-
+  
   tidysamples %>%
     reduce_(function(tidysample1, tidysample2) {
       by_ = intersect(names(tidysample1), names(tidysample2))
@@ -278,25 +278,25 @@ spread_draws = function(
 #' @importFrom tidyr spread
 #' @importFrom rlang has_name
 spread_draws_ = function(
-  draws,
-  variable_spec,
-  regex = FALSE,
-  sep = "[, ]",
-  draw_indices = c(".chain", ".iteration", ".draw")
+    draws,
+    variable_spec,
+    regex = FALSE,
+    sep = "[, ]",
+    draw_indices = c(".chain", ".iteration", ".draw")
 ) {
   #parse a variable spec in the form variable_name[dimension_name_1, dimension_name_2, ..] | wide_dimension
   spec = parse_variable_spec(variable_spec)
   variable_names = spec[[1]]
   dimension_names = spec[[2]]
   wide_dimension_name = spec[[3]]
-
+  
   #extract the draws into a long format data frame
   long_draws = spread_draws_long_(draws, variable_names, dimension_names, regex = regex, sep = sep, draw_indices = draw_indices)
-
+  
   #convert variable and/or dimensions back into usable data types
   #that were set on the model using recover_types
   long_draws = convert_cols_to_types_from_model(long_draws, c(variable_names, dimension_names), draws)
-
+  
   #spread a column into wide format if requested (only if one variable, because
   #we can't spread multiple keys simultaneously for the same value)
   if (!is.null(wide_dimension_name)) {
@@ -333,58 +333,58 @@ spread_draws_ = function(
 #' @importFrom tidyr spread separate gather
 #' @importFrom dplyr summarise_all group_by_at
 spread_draws_long_ = function(
-  draws,
-  variable_names,
-  dimension_names,
-  regex = FALSE,
-  sep = "[, ]",
-  draw_indices = c(".chain", ".iteration", ".draw")
+    draws,
+    variable_names,
+    dimension_names,
+    regex = FALSE,
+    sep = "[, ]",
+    draw_indices = c(".chain", ".iteration", ".draw")
 ) {
   if (!regex) {
     variable_names = escape_regex(variable_names)
   }
-
+  
   if (is.null(dimension_names)) {
     #no dimensions, just find the colnames matching the regex(es)
     variable_regex = paste0("^(", paste(variable_names, collapse = "|"), ")$")
     variable_names_index = grepl(variable_regex, colnames(draws))
-
+    
     if (!any(variable_names_index)) {
       stop0("No variables found matching spec: ",
-        printable_variable_names(variable_names)
+            printable_variable_names(variable_names)
       )
     }
-
+    
     variable_names = colnames(draws)[variable_names_index]
     unnest_legacy(draws[, c(draw_indices, variable_names)])
   }
   else {
     dimension_sep_regex = sep
     dimension_regex = "(.+)"
-
+    
     #find the variables to extract matching the given names and number of dimensions
     variable_regex = paste0("^",
-      #variable name
-      "(", paste(variable_names, collapse = "|"), ")\\[",
-      #dimensions
-      paste0(rep(dimension_regex, length(dimension_names)), collapse = dimension_sep_regex),
-      "\\]$"
+                            #variable name
+                            "(", paste(variable_names, collapse = "|"), ")\\[",
+                            #dimensions
+                            paste0(rep(dimension_regex, length(dimension_names)), collapse = dimension_sep_regex),
+                            "\\]$"
     )
     variable_names_index = grepl(variable_regex, colnames(draws))
     if (!any(variable_names_index)) {
       stop0("No variables found matching spec: ",
-        printable_variable_names(variable_names),
-        "[", paste0(dimension_names, collapse = ","), "]"
+            printable_variable_names(variable_names),
+            "[", paste0(dimension_names, collapse = ","), "]"
       )
     }
     variable_names = colnames(draws)[variable_names_index]
-
+    
     #rename columns to drop trailing "]" to eliminate extraneous last column
     #when we do separate(), below. e.g. "x[1,2]" becomes "x[1,2". Do the same
     #with variable_names so we can select the columns
     colnames(draws)[variable_names_index] %<>% substr(start = 1, stop = nchar(.) - 1)
     variable_names %<>% substr(start = 1, stop = nchar(.) - 1)
-
+    
     #specs containing empty dimensions (e.g. mu[] or mu[,k]) will produce
     #some dimension_names == ""; we can't use empty variable names below, so we
     #replace them with the ".drop" placeholder and then drop those columns later.
@@ -393,7 +393,7 @@ spread_draws_long_ = function(
       #must give each blank dimension column a unique name, otherwise spread() won't work below
       ifelse(. == "", paste0(".drop", seq_along(.)), .)
     dimension_names = dimension_names[dimension_names != ""]
-
+    
     # similarly, for nested dimensions specified using '.' we internally convert these to
     # numeric values in order to get sensible ordering
     temp_dimension_names = temp_dimension_names %>%
@@ -404,20 +404,20 @@ spread_draws_long_ = function(
     nested_dimension_names = nested_dimension_names[order(nested_dimension_names)]
     # remove nested dimensions from the final grouping dimensions (since they will not be columns after nesting)
     dimension_names = setdiff(dimension_names, c(nested_dimension_names, "."))
-
+    
     # Make nested data frame of just the variables we want to split, without chain indices (these are
     # all the same anyway and carrying them around adds a bunch of overhead). Nesting first makes the time
     # for separate() depend on the number of parameters instead of number of parameters * number of draws
     nested_draws = draws[, variable_names] %>%
       summarise_all(list) %>%
       gather(".variable", ".value", !!!variable_names)
-
+    
     #next, split dimensions in variable names into columns
     nested_draws = separate(nested_draws, ".variable", c(".variable", ".dimensions"), sep = "\\[|\\]")
     nested_draws = separate(nested_draws, ".dimensions", temp_dimension_names, sep = dimension_sep_regex,
-      convert = TRUE #converts dimensions to numerics if applicable
+                            convert = TRUE #converts dimensions to numerics if applicable
     )
-
+    
     # Now go to a long format for everything else...
     # We have three things to accomplish here:
     # 1. SPREAD so variable names are back as columns
@@ -443,9 +443,9 @@ spread_draws_long_ = function(
       # 2. ADD CHAIN INFO
       nested_draws[[".chain_info"]] = list(draws[, draw_indices])
       # 3. UNNEST
-      long_draws = unnest_legacy(nested_draws)
+      long_draws = unnest(nested_draws, -!!dimension_names)
     }
-
+    
     #drop the columns that correspond to blank dimensions in the original spec
     long_draws[, grep("^\\.drop", names(long_draws), value = TRUE)] = NULL
     #group by the desired dimensions so that we return a pre-grouped data frame to the user
@@ -460,15 +460,15 @@ spread_draws_long_ = function(
 ## nested_dimension_names: dimensions to be nested
 #' @importFrom dplyr filter summarise_at
 nest_dimensions_ = function(
-  long_draws,
-  dimension_names,
-  nested_dimension_names,
-  draw_indices = c(".chain", ".iteration", ".draw")
+    long_draws,
+    dimension_names,
+    nested_dimension_names,
+    draw_indices = c(".chain", ".iteration", ".draw")
 ) {
   ragged = FALSE
   value_name = ".value"
   value = as.name(value_name)
-
+  
   for (dimension_name in dimension_names) {
     if (is.character(long_draws[[dimension_name]])) {
       # character columns are converted into in-order factors to preserve
@@ -476,39 +476,39 @@ nest_dimensions_ = function(
       long_draws[[dimension_name]] = fct_inorder_(long_draws[[dimension_name]])
     }
   }
-
+  
   long_draws = group_by_at(long_draws,
-    c(draw_indices, ".variable", dimension_names) %>%
-      # nested dimension names must come at the end of the group list
-      # (minus the last nested dimension) so that we summarise in the
-      # correct order
-      setdiff(nested_dimension_names) %>%
-      c(nested_dimension_names[-length(nested_dimension_names)])
+                           c(draw_indices, ".variable", dimension_names) %>%
+                             # nested dimension names must come at the end of the group list
+                             # (minus the last nested dimension) so that we summarise in the
+                             # correct order
+                             setdiff(nested_dimension_names) %>%
+                             c(nested_dimension_names[-length(nested_dimension_names)])
   )
-
+  
   # go from last dimension up
   nested_dimension_names = rev(nested_dimension_names)
-
+  
   for (i in seq_along(nested_dimension_names)) {
     dimension_name = nested_dimension_names[[i]]
     dimension = as.name(dimension_name)
-
+    
     long_draws = summarise_at(long_draws, c(dimension_name, value_name), list)
-
+    
     # pull out the indices from the first draw to verify we can use them as array indices
     first_draw_indices = filter(long_draws, .draw == .draw[[1]])[[dimension_name]]
-
+    
     #this array is ragged if any of the indices on the current dimension are not all equal
     ragged = !all_elements_identical(first_draw_indices)
     reindex = ragged
-
+    
     if (ragged) {
       # this is ragged, so first we'll combine all the valid indices of this dimension together
       indices = Reduce(union, first_draw_indices)
     } else {
       # this is not ragged, so we can just use the first value of indices
       indices = first_draw_indices[[1]]
-
+      
       # array is not ragged, so combining should be easy...
       if (is.character(indices) || is.factor(indices)) {
         # indices are strings, so update the names before we combine
@@ -529,10 +529,10 @@ nest_dimensions_ = function(
         reindex = TRUE
       }
     }
-
+    
     if (reindex) {
       is_character_index = is.character(indices) || is.factor(indices)
-
+      
       #create a template list that we can use to re-index the values
       template_vector = long_draws[[value_name]][[1]][[1]]
       template_vector[] = NA
@@ -540,7 +540,7 @@ nest_dimensions_ = function(
       if (is_character_index) {
         names(template_list) = indices
       }
-
+      
       #then we'll re-index each value
       long_draws[[value_name]] =
         map2_(long_draws[[dimension_name]], long_draws[[value_name]], function(indices, old_value) {
@@ -552,10 +552,10 @@ nest_dimensions_ = function(
           new_value
         })
     }
-
+    
     # at this point each element at this level should be appropriately named and indexed, so we
     # can go ahead and combine the vectors.
-
+    
     # for everything but the first dimension, we bind before the first dimension. This ensures
     # that the first dimension creates a vector (not a Nx1 array), which is what we want if
     # there is only one dimension.
@@ -564,10 +564,10 @@ nest_dimensions_ = function(
     } else {
       long_draws[[value_name]] = lapply(long_draws[[value_name]], abind0)
     }
-
+    
     long_draws[[dimension_name]] = NULL
   }
-
+  
   ungroup(long_draws)
 }
 
@@ -577,12 +577,12 @@ nest_dimensions_ = function(
 # sample draws from a model
 sample_draws_from_model_ = function(model, ndraws = NULL, seed = NULL) {
   draws = tidy_draws(model)
-
+  
   if (!is.null(ndraws)) {
     if (!is.null(seed)) set.seed(seed)
     draws = sample_n(draws, ndraws)
   }
-
+  
   draws
 }
 
@@ -600,12 +600,12 @@ all_elements_identical = function(.list) {
   if (length(.list) == 0) {
     return(TRUE)
   }
-
+  
   first = .list[[1]]
   for (e in .list) {
     if (!identical(e, first)) return(FALSE)
   }
-
+  
   TRUE
 }
 
@@ -618,7 +618,7 @@ abind0 = function(vectors) {
   if (length(vectors) == 1) {
     return(vectors[[1]])
   }
-
+  
   first_vector = vectors[[1]]
   if (is.null(dim(first_vector))) {
     inner_dim = length(first_vector)
@@ -628,12 +628,12 @@ abind0 = function(vectors) {
     inner_dimnames = dimnames(vectors[[1]]) %||%
       replicate(length(inner_dim), NULL)
   }
-
+  
   dim. = c(inner_dim, length(vectors))
-
+  
   outer_dimnames = list(names(vectors))
   dimnames. = c(outer_dimnames, inner_dimnames)
-
+  
   perm = c(length(dim.), seq_len(length(dim.) - 1))
   x = aperm(
     array(unlist(vectors, recursive = FALSE), dim = dim.),
@@ -656,28 +656,28 @@ parse_variable_spec = function(variable_spec) {
   names_spec = names %>%
     set_names() %>%
     lapply(function(name) list(name, NULL, NULL))
-
-
+  
+  
   c_function = function(...) {
     Reduce(function(spec1, spec2) map2_(spec1, spec2, base::c), list(...))
   }
-
+  
   spec_env = as.environment(c(
     list(
       c = c_function,
       cbind = c_function,
-
+      
       `[` = function(spec, ...) {
         dimension_names = as.character(substitute(list(...))[-1])
-
-
+        
+        
         list(
           spec[[1]],
           c(spec[[2]], dimension_names),
           spec[[3]]
         )
       },
-
+      
       `|` = function(spec, by) {
         wide_dimension_name = by[[1]]
         if (!is.null(spec[[3]])) {
@@ -686,7 +686,7 @@ parse_variable_spec = function(variable_spec) {
         if (length(wide_dimension_name) != 1) {
           stop0("Right-hand side of `|` must be exactly one name")
         }
-
+        
         list(
           spec[[1]],
           spec[[2]],
@@ -696,7 +696,7 @@ parse_variable_spec = function(variable_spec) {
     ),
     names_spec
   ))
-
+  
   spec_data_mask = new_data_mask(spec_env)
   eval_tidy(variable_spec, spec_data_mask)
 }
